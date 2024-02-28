@@ -1,4 +1,4 @@
-# QuASAR: Quantitative Allele Specific Analysis of Reads
+# QuASAR: Quantitative Allele Specific Analysis of Reads v2 changes. 
 QuASAR ([Harvey et al, 2015]) is an R package, that implements a statistical method for: i) genotyping from next-generation sequencing reads, and ii) conducting inference on allelic imbalance at heterozygous sites. The sequencing data can be RNA-seq, DNase-seq, ATAC-seq or any other type of high-throughput sequencing data. The input data to QuASAR is a processed pileup file (as detailed later). Here, we do not cover in depth important pre-processing steps such as choice of the aligner, read filtering and duplicate removal. For our new method on MPRA data analysis please check the [mpra folder](mpra/). 
 
 We also want to emphasize that the current software is still in development, we would kindly appreciate any comments and bug reports.
@@ -23,14 +23,14 @@ To install from within an R session:
 
 ```R
 require(devtools)
-install_github('piquelab/QuASAR')
-library('QuASAR')
+install_github('piquelab/QuASARv2')
+library('QuASARv2')
 ```
 
 However, this method is occasionally problematic. Alternatively, you can clone/fork this repository and then build the package:
 ```C
-git clone https://github.com/piquelab/QuASAR.git
-R CMD build QuASAR
+git clone https://github.com/piquelab/QuASARv2.git
+R CMD build QuASARv2
 ```
 then in R,
 ```R
