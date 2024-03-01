@@ -4,7 +4,7 @@
 #' returns the log likelihood of reference & alternate read count data
 #' given rho, & dispersion.
 #'
-#' @param logit.p logit(rho) value in [0, 1]
+#' @param logit.p logit(rho) , rho value in [0, 1]
 #' @param D dispersion estimate
 #' @param R reference read count
 #' @param A alternate read count

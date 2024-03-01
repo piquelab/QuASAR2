@@ -30,10 +30,12 @@ fitQuasarMpra <- function(ref,alt,prop=0.5,eps=0.001,nbreaks=10){
   ##               with null \rho value
   ## Mmax ~ disperison which maximizes the llk
   Mvec <- sapply(levels(bin),function(mybin){
+    cat("Estimating Bin",mybin,":")
     aux <- sapply(M,function(M){
       sum(logLikBetaBinomialRhoEps(prop[bin==mybin],eps,M,ref[bin==mybin ],alt[bin==mybin]))
     })
     Mmax <- M[which.max(aux)]
+    cat(" ",which.max(aux)," ",Mmax,"\n")
     Mmax
   })
   #Mvec
@@ -65,5 +67,5 @@ fitQuasarMpra <- function(ref,alt,prop=0.5,eps=0.001,nbreaks=10){
   betas_z <- (betas.beta.binom - qlogis(prop))/betas_se
   ##
   padj_quasar <- p.adjust(pval3,method="BH")
-  data.frame(bin,betas.beta.binom,betas_se,betas_z,pval3,padj_quasar)
+  data.frame(bin,M=Mvec[bin],betas.beta.binom,betas_se,betas_z,pval3,padj_quasar)
 }
