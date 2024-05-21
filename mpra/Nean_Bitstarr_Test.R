@@ -39,12 +39,32 @@ myc = mydat %>% group_by(identifier) %>% summarize(n=n(),k=length(unique(Tr)),c=
 
 mycfilt <- myc %>% filter(n>3,k>1,c>2)
 
-mydat2 <- mydat %>% 
-  filter(identifier %in% mycfilt$identifier) %>%
-  select(identifier, R, A, DNA_prop, bin, Treatment, Tr, batch) %>%
-  mutate(N=R+A) %>% 
-  group_by(identifier) %>%
-  mutate(Nstar=mean(N))
+
+##library(QuASAR2)
+
+mydat.res <- fitQuasarMpra(mydat$N,mydat$H,mydat$DNA_prop,M=50)
+
+
+mydat.res <- mydat.res %>% 
+  group_by(bin) %>%
+  mutate(r=rank(pval3, ties.method = "random"),
+         pexp=r/length(pval3))
+
+p1 <- mydat.res %>%
+  ggplot(aes(x=-log10(pexp),y=-log10(pval3),color=bin)) +
+  geom_point() +
+  geom_abline(slope=1,intercept=0) +
+  xlab(expression(Expected -log[10](p))) +
+  ylab(expression(Observed -log[10](p))) + 
+  theme_bw()
+
+p1
+
+
+pval3 <- mydat.res %>% 
+
+qq(mydat.res$pval3)
+
 
 msum <- mydat2 %>% summarise(Nstar=mean(N)) 
 Nstar <- msum$Nstar
@@ -53,7 +73,7 @@ Nstar <- msum$Nstar
 nbreaks=10
 cov_breaks <- unique(c(0,quantile(Nstar,(1:nbreaks)/nbreaks)))
 bin <- cut(Nstar,cov_breaks)
-M <- exp((0:500)/50)
+M <- exp((-50:50)/5)
 msum$bin <- bin
 table(bin)
 
@@ -77,12 +97,14 @@ Mvec <- sapply(levels(bin),function(mybin){
   Mmax <- M[which.max(aux)]
   cat(" ",which.max(aux)," ",Mmax,"\n")
 ##  Mmax
-  aux/sum(aux)
+  paux <- exp(aux-max(aux))
+  paux <- paux/sum(paux)
+  paux  
 })
 
-plot(log10(M),Mvec[,1])
+plot(log10(M),Mvec[,9])
 
-plot(log10(msum2$N),Mvec)
+##plot(log10(msum2$N),Mvec)
 
 mybin=levels(bin)[10]
 aux <- sapply(M,function(M){
@@ -104,7 +126,6 @@ which.max(aux)
 head(mydat2)
 
 dim(Mvec)
-
 
 
 # Function to implement linear model and include DF

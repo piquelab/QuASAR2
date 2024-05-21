@@ -21,38 +21,44 @@
 #'
 #' @examples
 #' 
-fitQuasarMpra <- function(ref,alt,prop=0.5,eps=0.001,nbreaks=10){
+fitQuasarMpra <- function(ref,alt,prop=0.5,eps=0.001,nbreaks=10,M=0){
   tot <- ref + alt;
   cov_breaks <- unique(c(0,quantile(tot,(1:nbreaks)/nbreaks)))
   bin <- cut(tot,cov_breaks)
-  M <- exp((0:500)/50)
-  ## aux ~ loglikelihood of the beta bionmial model across D values
-  ##               with null \rho value
-  ## Mmax ~ disperison which maximizes the llk
-  Mvec <- sapply(levels(bin),function(mybin){
-    cat("Estimating Bin",mybin,":")
-    aux <- sapply(M,function(M){
-      sum(logLikBetaBinomialRhoEps(prop[bin==mybin],eps,M,ref[bin==mybin ],alt[bin==mybin]))
+  if(M<=0){
+    M <- exp((-50:50)/5)
+    ## aux ~ loglikelihood of the beta bionmial model across D values
+    ##               with null \rho value
+    ## Mmax ~ disperison which maximizes the llk
+    Mvec <- sapply(levels(bin),function(mybin){
+      cat("Estimating Bin",mybin,":")
+      aux <- sapply(M,function(M){
+        sum(logLikBetaBinomialRhoEps(prop[bin==mybin],eps,M,ref[bin==mybin ],alt[bin==mybin]))
+      })
+      Mmax <- M[which.max(aux)]
+      cat(" ",which.max(aux)," ",Mmax,"\n")
+      Mmax
     })
-    Mmax <- M[which.max(aux)]
-    cat(" ",which.max(aux)," ",Mmax,"\n")
-    Mmax
-  })
+  }else{
+    Mvec = rep(M,length(levels(bin)))
+  }
   #Mvec
   #cat("#Disp: ", round(Mvec, 2), "\n")
   aux2 <- t(sapply(1:length(ref),function(ii){
     auxLogis <- optim(0,
-                      fn=logLikBetaBinomial2,
-                      gr=gLogLikBetaBinomial,
-                      D=Mvec[bin[ii]],
-                      R=ref[ii],
-                      A=alt[ii],
-                      method="L-BFGS-B",
-                      hessian=TRUE,
-                      lower=-5,
-                      upper=5)
-    c(auxLogis$par,1/(auxLogis$hessian)^.5)
-  }))
+                        fn=logLikBetaBinomial2,
+                        gr=gLogLikBetaBinomial,
+                        D=Mvec[bin[ii]],
+                        R=ref[ii],
+                        A=alt[ii],
+                        method="L-BFGS-B",
+                        hessian=TRUE,
+                        lower=-5,
+                        upper=5)
+      c(auxLogis$par,1/(auxLogis$hessian)^.5)
+    }))
+  
+  
   ## eps ~ jointly inferred error rate for this sample
   rho3 <- plogis(aux2[,1])
   betas.beta.binom <- aux2[,1]
