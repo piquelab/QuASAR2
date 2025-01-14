@@ -8,3 +8,4 @@ Maintainer: Roger Pique-Regi <rpique@gmail.com>
 Description: Joint genotyping, error estimation, and Allele Specific Expression
     inference for multiple RNA-Seq samples.
 License: MIT + file LICENSE
+RoxygenNote: 7.2.3

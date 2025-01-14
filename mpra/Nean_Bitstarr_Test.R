@@ -35,14 +35,73 @@ mydat$Tr = factor(mydat$Tr) %>% relevel("Control")
 
 mydat <- mutate(mydat, betacorr =  betas.beta.binom - qlogis(DNA_prop))
 
+
+
 myc = mydat %>% group_by(identifier) %>% summarize(n=n(),k=length(unique(Tr)),c=sum(Tr=="Control"))
 
-mycfilt <- myc %>% filter(n>3,k>1,c>2)
+mycfilt <- myc %>% filter(n>3,k>1,c>=2)
 
 
 ##library(QuASAR2)
 
-mydat.res <- fitQuasarMpra(mydat$N,mydat$H,mydat$DNA_prop,M=50)
+###mydat.res <- fitQuasarMpra(mydat$N,mydat$H,mydat$DNA_prop,M=50)
+
+library(VGAM)
+
+
+dd <- mydat %>% filter(identifier=="chr10:10741817_rev")  %>%
+  mutate(DNAq=qlogis(DNA_prop)) %>%
+  select(N,H,DNAq,M) 
+
+
+fit <- vglm(cbind(N, H) ~ 1, betabinomial(zero = 1), dd, trace = TRUE)
+
+
+
+fit2 <- vglm(cbind(N, H) ~ identifier , betabinomial(zero = 1), mydat, trace = TRUE)
+
+
+summary(fit)
+
+## Example data: matrix of successes and failures
+data <- data.frame(successes = c(10, 20, 30, 40, 50),
+                   failures = c(15, 25, 35, 45, 55))
+
+# Combine successes and failures into a matrix
+y <- cbind(data$successes, data$failures)
+
+# Fit the Beta-Binomial model
+fit <- vglm(y ~ 1, betabinomial, data = data, trace = TRUE)
+
+# Summary of the model
+model_summary <- summary(fit)
+
+# Extracting p-values
+p_value <- model_summary@coef3[, 4]  # p-values are in the fourth column
+print(p_value)
+
+
+
+
+bdata <- data.frame(N = 10, mu = 0.5, rho = 0.8)
+bdata <- transform(bdata,
+                   y = rbetabinom(100, size = N, prob = mu, rho = rho))
+
+fit <- vglm(cbind(y, N-y) ~ 1, betabinomial, bdata, trace = TRUE)
+coef(fit, matrix = TRUE)
+Coef(fit)
+head(cbind(depvar(fit), weights(fit, type = "prior")))
+
+
+# Example 2
+fit <- vglm(cbind(R, N-R) ~ 1, betabinomial, lirat,
+            trace = TRUE, subset = N > 1)
+coef(fit, matrix = TRUE)
+Coef(fit)
+t(fitted(fit))
+t(depvar(fit))
+t(weights(fit, type = "prior"))
+
 
 
 mydat.res <- mydat.res %>% 

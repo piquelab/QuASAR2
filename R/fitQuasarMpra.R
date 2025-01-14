@@ -18,9 +18,6 @@
 #' - padj_quasar BH adjusted p.value 
 #' 
 #' @export
-#'
-#' @examples
-#' 
 fitQuasarMpra <- function(ref,alt,prop=0.5,eps=0.001,nbreaks=10,M=0){
   tot <- ref + alt;
   cov_breaks <- unique(c(0,quantile(tot,(1:nbreaks)/nbreaks)))

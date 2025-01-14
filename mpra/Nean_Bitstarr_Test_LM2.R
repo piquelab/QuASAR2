@@ -37,7 +37,7 @@ mydat <- mutate(mydat, betacorr =  betas.beta.binom - qlogis(DNA_prop))
 
 logLikBetaBinomialLogistic <- function(b,X,D,R,A,offset=0.0){
   p <- plogis(X %*% b + offset ) ## maybe add offset
-  aux <- (lgamma(R+p*D) + lgamma(A + (1-p)*D) - lgamma(R+A+D) - lgamma(p*D) - lgamma((1-p)*D) + lgamma(D));
+  aux <- (lgamma(D) + lgamma(R+p*D) + lgamma(A + (1-p)*D) - lgamma(R+A+D) - lgamma(p*D) - lgamma((1-p)*D));
   -sum(aux)
 }
 
@@ -47,11 +47,14 @@ gLogLikBetaBinomialLogistic <- function(b,X,D,R,A,offset=0.0){
   -t(X) %*% aux
 }
 
+
+
 ## Consider a ridge/lasso penalty? 
 
 M=10 
 ## ##"chr10:10741817_rev"
-##dd <- mydat %>% filter(identifier=="chr10:111658679_fwd")  %>%
+## ##"chr10:111658679_rev"
+##. dd <- mydat %>% filter(identifier=="chr10:111658679_fwd") ## %>%
 ## ###  mutate(DNAq=qlogis(DNA_prop)) %>%
 ##  select(N,H,DNA_prop,Tr,batch,identifier) 
 
@@ -141,6 +144,83 @@ logLikBetaBinomialRhoEps <- function(rho,eps,D,R,A){
   aux
 }
 
+
+logLikBetaBinomialM <- function(D,p,R,A){
+#  eps=0.001
+#  p <- (p*(1-eps)+(1-p)*eps)
+  aux <- (lgamma(D) + lgamma(R+p*D) + lgamma(A + (1-p)*D) - lgamma(R+A+D) - lgamma(p*D) - lgamma((1-p)*D) );
+  -sum(aux)
+}
+
+gLogLikBetaBinomialM <- function(D,p,R,A){
+#  eps=0.001
+#  p <- (p*(1-eps)+(1-p)*eps)
+  aux <- (digamma(D) + p * digamma(R + p * D) + (1 - p) * digamma(A + (1 - p) * D) - digamma(R+A+D) - p * digamma(p * D) - (1-p) * digamma((1 - p) * D ))
+  -sum(aux)
+}
+
+logLikBetaBinomialM(50, 
+                    p=res3$p.fit,
+                    R=res3$N,
+                    A=res3$H)
+
+gLogLikBetaBinomialM(50, 
+                    p=res3$p.fit,
+                    R=res3$N,
+                    A=res3$H)
+
+
+mt <- res3 %>% summarize(mt=mean(N+H)) 
+
+hist(log10(mt$mt),breaks=20)
+
+selid <- mt$identifier[mt$mt>1 & mt$mt<6000000]
+
+selv <- res3$identifier %in% selid
+
+sum(selv)
+
+
+auxLogis <- optim(par=10,
+                  fn=logLikBetaBinomialM,
+                  gr=gLogLikBetaBinomialM,
+                  p=res3$p.fit[selv],
+                  R=res3$N[selv],
+                  A=res3$H[selv],
+                  method="L-BFGS-B",control=c(trace=6),
+                  hessian=TRUE,
+                  lower=0.1,
+                  upper=10000)
+
+
+auxLogis$convergence
+
+auxLogis$message
+
+c(auxLogis$par,1/(auxLogis$hessian)^.5)
+
+
+M <- exp((-20:50)/5)
+aux <- sapply(M,function(M){
+  (logLikBetaBinomialM(M,p=res3$p.fit,
+                               R=res3$N,
+                               A=res3$H))
+})
+
+aux2 <- sapply(M,function(M){
+  (gLogLikBetaBinomialM(M,p=res3$p.fit,
+                       R=res3$N,
+                       A=res3$H))
+})
+
+
+Mmax <- M[which.min(aux)]
+cat(" ",which.max(aux)," ",Mmax,"\n")
+
+plot(log10(M),-aux/max(aux))
+
+lines(log10(M),-aux2/max(aux2))
+abline(h=0)
 
 M <- exp((-50:50)/5)
 eps=0.001
