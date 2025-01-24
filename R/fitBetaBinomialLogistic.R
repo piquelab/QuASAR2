@@ -22,11 +22,12 @@
 #' @export
 #'
 #' @examples
-#' # Assuming `mydat` is a data frame with required columns and model predictors
-#' model_formula <- ~ batch + Tr
-#' initial_b <- rep(0, length = ncol(model.matrix(model_formula, mydat)))
-#' fitted_model <- fitBetaBinomialLogistic(mydat, model_formula, b = initial_b)
-#'
+#' \dontrun{
+#'   # Assuming `mydat` is a data frame with required columns and model predictors
+#'   #model_formula <- ~ batch + Tr
+#'   #initial_b <- rep(0, length = ncol(model.matrix(model_formula, mydat)))
+#'   #fitted_model <- fitBetaBinomialLogistic(mydat, model_formula, b = initial_b)
+#' }
 #' @seealso
 #' \code{\link{logLikBetaBinomialLogistic}}: Log-likelihood function for beta-binomial logistic regression.
 #' \code{\link{gLogLikBetaBinomialLogistic}}: Gradient of the log-likelihood function for beta-binomial logistic regression.
