@@ -15,6 +15,7 @@
 #' present in the `dd` object. 
 #' @param b Initial values for the regression coefficients. If NULL, they will be initialized to zero.
 #' @param eps Small constant added to probabilities to prevent them from being 0 or 1, default is 0.001.
+#' @param control a `list` of control parameters for \link{optim}, 
 #'
 #' @return A list containing two elements: `res`, a tibble with the fitted coefficients, standard errors,
 #'         statistical significance, and other diagnostic measures; and `dd`, the modified data frame
@@ -31,7 +32,7 @@
 #' @seealso
 #' \code{\link{logLikBetaBinomialLogistic}}: Log-likelihood function for beta-binomial logistic regression.
 #' \code{\link{gLogLikBetaBinomialLogistic}}: Gradient of the log-likelihood function for beta-binomial logistic regression.
-fitBetaBinomialLogistic <- function(dd, model, b = NULL, eps = 0.001) {
+fitBetaBinomialLogistic <- function(dd, model, b = NULL, eps = 0.001,control = list()) {
   X <- model.matrix(model, dd)
   if (is.null(b)) {
     b <- rep(0, ncol(X))
@@ -46,10 +47,11 @@ fitBetaBinomialLogistic <- function(dd, model, b = NULL, eps = 0.001) {
                     A = dd$A,
                     offset = ifelse("offset" %in% names(dd), dd$offset, 0),
                     eps = eps,
-                    method = "L-BFGS-B",
+                    method = "BFGS",
                     hessian = TRUE,
-                    lower = -8,
-                    upper = 8)
+                  ##  lower = -8,
+                ##    upper = 8,
+                    control = control)
   ##auxLogis$convergence
   ##auxLogis$message
   
@@ -60,6 +62,7 @@ fitBetaBinomialLogistic <- function(dd, model, b = NULL, eps = 0.001) {
     coeff = auxLogis$par,
     se = 1 / diag(auxLogis$hessian)^0.5,
     convergence = auxLogis$convergence,
+    message = auxLogis$message,
     qr.rank = qr(X)$rank,
     df = ncol(X),
     n = nrow(X)

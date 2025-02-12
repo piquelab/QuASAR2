@@ -110,7 +110,7 @@ fitQuasar2 <- function(dd, model, nbreaks = 20, M = 20, eps = 0.001,
                       M=res3$M,
                       method="L-BFGS-B",#control=c(trace=6),
                       hessian=TRUE,
-                      lower=1E-5,
+                      lower=1E-3,
                       upper=0.1)
     auxLogis$convergence
     auxLogis$message
@@ -123,7 +123,7 @@ fitQuasar2 <- function(dd, model, nbreaks = 20, M = 20, eps = 0.001,
     aux <- res3 %>% group_by(identifier) %>% nest()
     aux$res <- res$res
     
-    res <- aux %>% mutate(res=map2(data,res, ~fitBetaBinomialLogistic(.x,model=model, b=.y$coeff,eps=neweps))) 
+    res <- aux %>% mutate(res=map2(data,res, ~fitBetaBinomialLogistic(.x,model=model, b=.y$coeff,eps=neweps,control=list(factr=1E10)))) 
     
     res <- res %>% mutate(data=map(res, "dd"),res=map(res,"res"))
     

@@ -39,9 +39,6 @@ mydat2$identifier <- paste0(mydat2$rsID,":",mydat2$Colonoid_line)
 
 ##mydat <- mutate(mydat, betacorr =  betas.beta.binom - qlogis(DNA_prop))
 
-nbreaks = 20; M = 20; eps = 0.001;
-
-
 myc = mydat2 %>% group_by(identifier) %>% summarize(n=n(),k=length(unique(Tr)),c=sum(Tr=="control"))
 mycfilt <- myc %>% filter(n>3,k>1,c>2)
 
