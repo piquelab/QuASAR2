@@ -53,6 +53,8 @@ fitQuasar2 <- function(dd, model, nbreaks = 20, M = 20, eps = 0.001,
   dd <- dd %>% mutate(bin=cut(MN,cov_breaks)) 
   binlab <- levels(dd$bin)
   
+  cat(binlab,"\n")
+  
   neweps <- eps
   
   dd$M <- M
@@ -75,7 +77,7 @@ fitQuasar2 <- function(dd, model, nbreaks = 20, M = 20, eps = 0.001,
   while(notConverged & iteration < maxIt){
     cat("Iteration: ",iteration,"\n")
     cat("Optimizing M\n")
-    ## Consider to separate to a different function. 
+    ## Consider to separate to a different function. Also it does not work if only one bin. 
     Mres <- sapply(binlab,function(bin){
       selv <- res3$bin==bin;
       auxLogis <- optim(par=Mvec[bin],
@@ -88,6 +90,7 @@ fitQuasar2 <- function(dd, model, nbreaks = 20, M = 20, eps = 0.001,
                         hessian=TRUE,
                         lower=0.1,
                         upper=10000)
+      
       data.frame(M=auxLogis$par,Mse=1/(auxLogis$hessian)^.5,conv=auxLogis$convergence)
     })
     Mres <- t(Mres)

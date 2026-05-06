@@ -57,10 +57,12 @@ fitBetaBinomialLogistic <- function(dd, model, b = NULL, eps = 0.001,control = l
   
   dd$p.fit <- plogis(X %*% auxLogis$par + ifelse("offset" %in% names(dd), dd$offset, 0))
   
+  iH <- solve(auxLogis$hessian)
+  
   res <- tibble(
     term = colnames(X),
     coeff = auxLogis$par,
-    se = 1 / diag(auxLogis$hessian)^0.5,
+    se = diag(iH)^0.5,
     convergence = auxLogis$convergence,
     message = auxLogis$message,
     qr.rank = qr(X)$rank,
