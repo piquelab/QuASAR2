@@ -1,0 +1,117 @@
+---
+title: "fitQuasar2CR: Cox-Reid + EB Beta-Binomial Regression"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{fitQuasar2CR: Cox-Reid + EB Beta-Binomial Regression}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7, fig.height = 4
+)
+```
+
+# Overview
+
+`fitQuasar2CR` is a beta-binomial regression for allele-specific count data
+that:
+
+1. parameterizes the BB precision as $\psi = \log(1/M)$,
+2. estimates $\psi$ per SNP with the **Cox-Reid adjusted profile likelihood**,
+3. **moderates** $\psi$ across SNPs with a smooth trend in `log(baseMean)` +
+   empirical-Bayes shrinkage on a Normal prior, and
+4. exposes a `model.matrix` interface so `testCoef`, `testContrast`, and
+   `testLRT` work like in `limma` / `edgeR` / `DESeq2`.
+
+The full math, derivations of the score and information matrix, and the
+empirical-Bayes prior derivation are in `inst/doc/quasar2CR_math.md` (also
+shipped at the top of the QuASAR2ex/ folder in the repo).
+
+# A quick example
+
+```{r example, eval = FALSE}
+library(QuASAR2)
+set.seed(1)
+
+## simulate 50 SNPs with 8 reps each, half-treatment effect on trt=B
+G   <- 50
+n_g <- 8
+trt <- factor(rep(c("A","A","A","A","B","B","B","B"), length.out = n_g))
+M_g <- exp(runif(G, log(20), log(200)))
+
+dat <- do.call(rbind, lapply(seq_len(G), function(g) {
+  ## true effect: half the SNPs have b_trt = 1, half are null
+  b_trt <- if (g <= G/2) 1.0 else 0
+  mu  <- 1 / (1 + exp(-(b_trt * (trt == "B"))))
+  pp  <- rbeta(n_g, M_g[g] * mu, M_g[g] * (1 - mu))
+  N   <- sample(40:150, n_g, replace = TRUE)
+  R   <- rbinom(n_g, N, pp); A <- N - R
+  data.frame(identifier = sprintf("snp_%03d", g), R = R, A = A, trt = trt)
+}))
+
+fit <- fitQuasar2CR(dat, design = ~ trt, verbose = FALSE)
+print(fit)
+```
+
+# Inference
+
+## Wald test for a single coefficient
+
+```{r wald, eval = FALSE}
+res_wald <- testCoef(fit, coef = "trtB")
+head(res_wald)
+```
+
+By default the reference distribution is Student-t with `df = n_g - p_g`
+("residual" df).  For closer-to-nominal Type-I error at small `n_g`, pass
+`df_method = "moderated"` which uses `df = n_g - p_g + 1/sigma2_psi` (the EB
+prior precision); see the calibration study in `QuASAR2ex/` for the numbers.
+
+```{r moderated, eval = FALSE}
+res_wald_mod <- testCoef(fit, coef = "trtB", df_method = "moderated")
+```
+
+## Likelihood ratio test against a reduced design
+
+```{r lrt, eval = FALSE}
+res_lrt <- testLRT(fit, reduced = ~ 1)
+head(res_lrt)
+```
+
+This computes $\Lambda_g = 2(\ell_{\rm full} - \ell_{\rm red})$ holding
+dispersion fixed at the full-model MAP estimate (edgeR convention).
+
+## Arbitrary linear contrasts
+
+```{r contrasts, eval = FALSE}
+L <- makeContrastsQuasar("trtB", fit)            # single-row contrast
+res_F <- testContrast(fit, L)
+```
+
+For multi-treatment designs you can stack contrasts as rows of `L`.
+
+# What's saved on the fit
+
+```{r inspect, eval = FALSE}
+fit$sigma2_psi              # EB prior variance on log(1/M)
+head(fit$dispersion)        # per-SNP psi, M, psi_gw, psi_trend, var_samp, baseMean
+fit$eps                     # MLE of shared sequencing error
+fit$loglik                  # vector of per-SNP log-likelihoods at convergence
+```
+
+# When to use what
+
+| Situation                            | `ref`      | `df_method`  |
+|--------------------------------------|------------|--------------|
+| Default, safe (publication FDR)      | `"t"`/`"F"`| `"residual"` |
+| Maximum power, ~nominal Type-I       | `"t"`/`"F"`| `"moderated"`|
+| Asymptotic comparison, large `n_g`   | `"normal"`/`"chisq"` | n/a |
+
+The `"residual"` default is mildly conservative (Type-I ~ 0.035 across a
+27-cell coverage x dispersion x n_g grid).  The `"moderated"` option gives
+Type-I ~ 0.052 (nominal) but can mildly exceed 0.05 at very small `n_g`
+combined with very weak overdispersion.

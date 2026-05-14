@@ -1,11 +1,25 @@
 Package: QuASAR2
 Type: Package
 Title: Quantitative Allele Specific Analysis of Reads v2
-Version: 0.2
-Date: 2024-02-28
+Version: 0.3.0
+Date: 2026-05-14
 Author: Roger Pique-Regi, Chris Harvey, G Moyerbrailean, C Kalita, et al.
 Maintainer: Roger Pique-Regi <rpique@gmail.com>
 Description: Joint genotyping, error estimation, and Allele Specific Expression
-    inference for multiple RNA-Seq samples.
+    inference for multiple RNA-Seq samples. Includes fitQuasar2CR(), a beta-
+    binomial GLM with Cox-Reid profile-likelihood dispersion estimation,
+    empirical-Bayes shrinkage across SNPs, and design-matrix based LRT and
+    Wald inference.
 License: MIT + file LICENSE
-RoxygenNote: 7.2.3
+Imports:
+    MASS,
+    stats
+Suggests:
+    locfit,
+    numDeriv,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+RoxygenNote: 7.3.1
+Encoding: UTF-8
