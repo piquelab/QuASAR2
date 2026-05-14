@@ -130,6 +130,8 @@ table(res3$myP,res3$padj<0.1)
 
 table(res3$myP,res3$padj2<0.1)
 
+table(res3$myP,res3$padj<0.01)
+
 
 ## ---------- 4. Recovery of dispersion ----------
 disp <- fit$dispersion
@@ -147,9 +149,12 @@ abline(0,1)
 lrt <- testLRT(fit, reduced = ~ batch)
 cat("\nLRT (drop trt): how many SNPs with padj < 0.05?",
     sum(lrt$padj < 0.05, na.rm = TRUE), "\n")
-cat("                            of the 20 truly DE:",
-    sum(lrt$padj[as.numeric(sub("snp_", "", lrt$identifier)) <= 20] < 0.05,
+cat("                            of the 200 truly DE:",
+    sum(lrt$padj[as.numeric(sub("snp_", "", lrt$identifier)) <= 200] < 0.05,
         na.rm = TRUE), "\n")
+
+
+sum(lrt$padj < 0.05, na.rm = TRUE)
 
 ## ---------- 6. Contrast: trtB - 0 (same as testCoef, just to exercise machinery) ----------
 L <- makeContrastsQuasar("trtB", fit)
