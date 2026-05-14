@@ -72,23 +72,21 @@ binomial) and large $\psi_g$ means heavy over-dispersion.
 The log-likelihood for one observation is
 
 $$
-\ell_{gi}(\boldsymbol{\beta}_g, \psi_g, \varepsilon)
-= \log\binom{N_{gi}}{R_{gi}}
-+ \log \mathrm{B}(R_{gi} + \alpha_{gi}, A_{gi} + \beta^*_{gi})
-- \log \mathrm{B}(\alpha_{gi}, \beta^*_{gi}),
+\ell_{gi}(\boldsymbol{\beta}_g, \psi_g, \varepsilon) = \log\binom{N_{gi}}{R_{gi}} + \log \mathrm{B}(R_{gi} + \alpha_{gi}, A_{gi} + \beta^*_{gi}) - \log \mathrm{B}(\alpha_{gi}, \beta^*_{gi}),
 $$
 
 with $\mathrm{B}(a,b) = \Gamma(a)\Gamma(b)/\Gamma(a+b)$. Expanding into log-gammas:
 
 $$
-\ell_{gi} =
-\log\binom{N_{gi}}{R_{gi}}
-+ \log\Gamma(R_{gi} + M_g \tilde\mu_{gi})
-+ \log\Gamma(A_{gi} + M_g (1-\tilde\mu_{gi}))
-- \log\Gamma(N_{gi} + M_g)
-- \log\Gamma(M_g \tilde\mu_{gi})
-- \log\Gamma(M_g (1-\tilde\mu_{gi}))
-+ \log\Gamma(M_g).
+\begin{aligned}
+\ell_{gi} &= \log\binom{N_{gi}}{R_{gi}} \\
+&\quad + \log\Gamma(R_{gi} + M_g \tilde\mu_{gi}) \\
+&\quad + \log\Gamma(A_{gi} + M_g(1-\tilde\mu_{gi})) \\
+&\quad - \log\Gamma(N_{gi} + M_g) \\
+&\quad - \log\Gamma(M_g \tilde\mu_{gi}) \\
+&\quad - \log\Gamma(M_g(1-\tilde\mu_{gi})) \\
+&\quad + \log\Gamma(M_g).
+\end{aligned}
 $$
 
 The per-SNP log-likelihood is
@@ -112,8 +110,7 @@ $\frac{d}{dx}\log\Gamma(x) = \psi^{(0)}(x)$ (digamma):
 $$
 \frac{\partial \ell_{gi}}{\partial \tilde\mu_{gi}}
 = M_g\Big[
-\psi^{(0)}(R_{gi} + M_g \tilde\mu_{gi}) - \psi^{(0)}(A_{gi} + M_g (1-\tilde\mu_{gi}))
-- \psi^{(0)}(M_g \tilde\mu_{gi}) + \psi^{(0)}(M_g (1-\tilde\mu_{gi}))
+\psi^{(0)}(R_{gi} + M_g \tilde\mu_{gi}) - \psi^{(0)}(A_{gi} + M_g(1-\tilde\mu_{gi})) - \psi^{(0)}(M_g \tilde\mu_{gi}) + \psi^{(0)}(M_g(1-\tilde\mu_{gi}))
 \Big].
 $$
 
@@ -141,8 +138,7 @@ $\psi^{(1)} = \text{trigamma}$:
 $$
 \frac{\partial^2 \ell_{gi}}{\partial \tilde\mu_{gi}^2}
 = M_g^2\Big[
-\psi^{(1)}(R_{gi} + M_g\tilde\mu_{gi}) + \psi^{(1)}(A_{gi} + M_g(1-\tilde\mu_{gi}))
-- \psi^{(1)}(M_g\tilde\mu_{gi}) - \psi^{(1)}(M_g(1-\tilde\mu_{gi}))
+\psi^{(1)}(R_{gi} + M_g\tilde\mu_{gi}) + \psi^{(1)}(A_{gi} + M_g(1-\tilde\mu_{gi})) - \psi^{(1)}(M_g\tilde\mu_{gi}) - \psi^{(1)}(M_g(1-\tilde\mu_{gi}))
 \Big] \leq 0.
 $$
 
@@ -192,8 +188,7 @@ Cox & Reid (1987) propose the **adjusted profile log-likelihood**
 $$
 \boxed{
 \mathrm{APL}_g(\psi_g)
-= \ell_g\big(\hat{\boldsymbol{\beta}}_g(\psi_g), \psi_g\big)
-- \tfrac{1}{2}\log\det \mathcal{I}_g\big(\hat{\boldsymbol{\beta}}_g(\psi_g) \mid \psi_g\big),
+= \ell_g\big(\hat{\boldsymbol{\beta}}_g(\psi_g), \psi_g\big) - \tfrac{1}{2}\log\det \mathcal{I}_g\big(\hat{\boldsymbol{\beta}}_g(\psi_g) \mid \psi_g\big),
 }
 $$
 
@@ -272,9 +267,8 @@ robustly as the robust variance of residuals minus the median sampling variance,
 truncated at zero:
 
 $$
-\hat\sigma_\psi^2 = \max\left(0,\;
-\frac{\mathrm{median}_g\lbrace(e_g - \mathrm{median}(e))^2\rbrace}{c_{4}^{2}}
-- \mathrm{median}_g\lbrace v_g^{\text{samp}}\rbrace
+\hat\sigma_\psi^2 = \max\left(0,
+\frac{\mathrm{median}_g\lbrace(e_g - \mathrm{median}(e))^2\rbrace}{c_{4}^{2}} - \mathrm{median}_g\lbrace v_g^{\text{samp}}\rbrace
 \right),
 $$
 
@@ -295,8 +289,7 @@ $$
 \boxed{
 \hat\psi_g^{\text{MAP}} = \arg\max_{\psi_g}
 \left[
-\mathrm{APL}_g(\psi_g)
-- \frac{\big(\psi_g - \psi^{\text{trend}}(\bar N_g)\big)^2}{2\hat\sigma_\psi^2}
+\mathrm{APL}_g(\psi_g) - \frac{\big(\psi_g - \psi^{\text{trend}}(\bar N_g)\big)^2}{2\hat\sigma_\psi^2}
 \right].
 }
 $$
