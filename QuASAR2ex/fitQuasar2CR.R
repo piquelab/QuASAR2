@@ -628,23 +628,33 @@ summary.quasar2CR <- function(object, ...) {
 #' @param object quasar2CR fit.
 #' @param coef   string, the coefficient name (must match colnames of the design
 #'               matrix). Use colnames(object$designs[[1]]) to see them.
+#' @param ref    reference distribution.  "t" (default) uses Student t with
+#'               df = n_g - p_g per SNP, which is required for nominal Type-I
+#'               error at small n.  "normal" uses the asymptotic z reference;
+#'               only correct when n_g is large or dispersion is known exactly.
 #' @return data frame with one row per SNP (identifier, estimate, std.error, z, pval, padj).
 #' @export
-testCoef <- function(object, coef) {
+testCoef <- function(object, coef, ref = c("t", "normal")) {
   stopifnot(inherits(object, "quasar2CR"))
+  ref <- match.arg(ref)
   rows <- lapply(seq_along(object$coefficients), function(k) {
     id <- names(object$coefficients)[k]
     b  <- object$coefficients[[k]]
     V  <- object$vcov[[k]]
     if (!(coef %in% names(b)))
       return(data.frame(identifier = id, estimate = NA, std.error = NA,
-                        statistic = NA, p.value = NA))
+                        statistic = NA, df = NA, p.value = NA))
     est <- unname(b[coef])
     se  <- sqrt(V[coef, coef])
-    z   <- est / se
-    p   <- 2 * stats::pnorm(-abs(z))
+    stat <- est / se
+    n_g <- nrow(object$designs[[k]])
+    p_g <- length(b)
+    df  <- max(1, n_g - p_g)
+    p   <- if (ref == "t") 2 * stats::pt(-abs(stat), df = df)
+           else            2 * stats::pnorm(-abs(stat))
     data.frame(identifier = id, estimate = est, std.error = se,
-               statistic = z, p.value = p, stringsAsFactors = FALSE)
+               statistic = stat, df = df, p.value = p,
+               stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, rows)
   out$padj <- stats::p.adjust(out$p.value, method = "BH")
@@ -655,10 +665,15 @@ testCoef <- function(object, coef) {
 #' @param object  quasar2CR fit.
 #' @param L       a contrast vector (numeric) or matrix (k rows). Names / colnames
 #'                must match coefficient names.
+#' @param ref     reference distribution.  "F" (default) uses F(k, n_g - p_g),
+#'                appropriate for small-n inference with estimated dispersion.
+#'                "chisq" uses the asymptotic chi-square_k reference; only
+#'                correct for large n_g.
 #' @return data frame with chi2 statistic, df, p-value (per SNP).
 #' @export
-testContrast <- function(object, L) {
+testContrast <- function(object, L, ref = c("F", "chisq")) {
   stopifnot(inherits(object, "quasar2CR"))
+  ref <- match.arg(ref)
   if (is.null(dim(L))) L <- matrix(L, nrow = 1, dimnames = list(NULL, names(L)))
   rows <- lapply(seq_along(object$coefficients), function(k) {
     id <- names(object$coefficients)[k]
@@ -667,16 +682,27 @@ testContrast <- function(object, L) {
     cn <- colnames(L);  if (is.null(cn)) cn <- names(b)
     miss <- setdiff(cn, names(b))
     if (length(miss))
-      return(data.frame(identifier = id, chi2 = NA, df = NA, p.value = NA))
+      return(data.frame(identifier = id, statistic = NA, df1 = NA, df2 = NA,
+                        p.value = NA))
     Lk  <- L[, names(b), drop = FALSE]
     est <- drop(Lk %*% b)
     VV  <- Lk %*% V %*% t(Lk)
     chi2 <- tryCatch(drop(crossprod(est, solve(VV, est))),
                      error = function(e) NA_real_)
-    df  <- nrow(Lk)
-    p   <- stats::pchisq(chi2, df, lower.tail = FALSE)
-    data.frame(identifier = id, chi2 = chi2, df = df, p.value = p,
-               stringsAsFactors = FALSE)
+    df1 <- nrow(Lk)
+    n_g <- nrow(object$designs[[k]])
+    p_g <- length(b)
+    df2 <- max(1, n_g - p_g)
+    if (ref == "F") {
+      Fstat <- chi2 / df1
+      p     <- stats::pf(Fstat, df1, df2, lower.tail = FALSE)
+      data.frame(identifier = id, statistic = Fstat,
+                 df1 = df1, df2 = df2, p.value = p, stringsAsFactors = FALSE)
+    } else {
+      p <- stats::pchisq(chi2, df1, lower.tail = FALSE)
+      data.frame(identifier = id, statistic = chi2,
+                 df1 = df1, df2 = NA, p.value = p, stringsAsFactors = FALSE)
+    }
   })
   out <- do.call(rbind, rows)
   out$padj <- stats::p.adjust(out$p.value, method = "BH")
@@ -692,10 +718,15 @@ testContrast <- function(object, L) {
 #' @param object   the full-design fit (class "quasar2CR").
 #' @param reduced  a formula. Must be a strict sub-set of object$formula's
 #'                 columns after expansion via model.matrix.
-#' @return data frame with chi2, df, p.value (and padj) per SNP.
+#' @param ref      reference distribution.  "F" (default) reports
+#'                 F = Lambda / df_diff  with F(df_diff, n_g - p_full) -- the
+#'                 small-n moderated analogue used by edgeR's QLF test.
+#'                 "chisq" uses the asymptotic chi-square_{df_diff} reference.
+#' @return data frame with chi2 (or F), df, p.value (and padj) per SNP.
 #' @export
-testLRT <- function(object, reduced) {
+testLRT <- function(object, reduced, ref = c("F", "chisq")) {
   stopifnot(inherits(object, "quasar2CR"))
+  ref <- match.arg(ref)
   dd <- object$data
 
   X_red_full <- stats::model.matrix(reduced, data = dd)
@@ -714,17 +745,30 @@ testLRT <- function(object, reduced) {
       error = function(e) NULL
     )
     if (is.null(fit_red))
-      return(data.frame(identifier = id, chi2 = NA, df = NA, p.value = NA))
+      return(data.frame(identifier = id, statistic = NA,
+                        df1 = NA, df2 = NA, p.value = NA))
     ll_red  <- fit_red$value
     ll_full <- object$loglik[k]
     df_full <- length(object$coefficients[[k]])
     df_red  <- length(fit_red$beta)
     chi2 <- 2 * (ll_full - ll_red)
     chi2 <- pmax(chi2, 0)               # guard against tiny negatives
-    df   <- df_full - df_red
-    p    <- if (df > 0) stats::pchisq(chi2, df, lower.tail = FALSE) else NA_real_
-    data.frame(identifier = id, chi2 = chi2, df = df, p.value = p,
-               stringsAsFactors = FALSE)
+    df1  <- df_full - df_red
+    n_g  <- nrow(object$designs[[k]])
+    df2  <- max(1, n_g - df_full)
+    if (df1 <= 0)
+      return(data.frame(identifier = id, statistic = NA,
+                        df1 = df1, df2 = df2, p.value = NA))
+    if (ref == "F") {
+      Fstat <- chi2 / df1
+      p     <- stats::pf(Fstat, df1, df2, lower.tail = FALSE)
+      data.frame(identifier = id, statistic = Fstat,
+                 df1 = df1, df2 = df2, p.value = p, stringsAsFactors = FALSE)
+    } else {
+      p <- stats::pchisq(chi2, df1, lower.tail = FALSE)
+      data.frame(identifier = id, statistic = chi2,
+                 df1 = df1, df2 = NA, p.value = p, stringsAsFactors = FALSE)
+    }
   })
   out <- do.call(rbind, rows)
   out$padj <- stats::p.adjust(out$p.value, method = "BH")

@@ -154,7 +154,10 @@ cat("                            of the 200 truly DE:",
         na.rm = TRUE), "\n")
 
 
-sum(lrt$padj < 0.05, na.rm = TRUE)
+sum(lrt$padj < 0.1, na.rm = TRUE)
+
+qq(lrt$p.value)
+
 
 ## ---------- 6. Contrast: trtB - 0 (same as testCoef, just to exercise machinery) ----------
 L <- makeContrastsQuasar("trtB", fit)
