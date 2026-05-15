@@ -118,19 +118,26 @@ Nvec=round(runif(20000,60,1000))
 
 dd <- sim_quasar2_df(n_snps = 20000, n_ctrl = 5, n_trt = 5, M = 200, N = Nvec, seed=1,frac_ASE_only=0.05,frac_cASE_only=0.05)
 
+## ---------- 2. Fit ----------
+fit <- fitQuasar2CR(dd, design = ~ Treatment,
+                    max_iter = 6, verbose = TRUE)
+
+print(fit)
+
+## ---------- 3. Recovery of trt effect ----------
+resCR.Tr <- testCoef(fit, coef = "Treatmenttreatment",df_method = "moderated")
+
+resCR.Int <- testCoef(fit, coef = "(Intercept)",df_method = "moderated")
+
+
+sum(resCR.Int$padj<0.1)
+
+sum(resCR.Tr$padj<0.1)
+
+qq(resCR.Tr$p.value)
+
+######
 resObj <- fitQuasar2(dd,~Treatment)
-# Intial model fitting with default M =  20 and eps =  0.001
-# Iteration:  1
-# Optimizing M
-# M change max: 104.6426
-# Optimizing eps
-# eps change max: 0
-# Model fitting with eps =  0.001
-# Max coeff change 0.030232
-# Iteration:  2
-# Optimizing M
-# Error in optim(par = Mvec[bin], fn = logLikBetaBinomialM, gr = gLogLikBetaBinomialM,  :
-#   non-finite value supplied by optim
 
 
 head(resObj)
@@ -152,37 +159,46 @@ qq1 <- qq(aseInt$pval)
 qq2 <- qq(aseTr$pval)
 
 
-aux <- res3 %>% group_by(identifier) %>% nest()
 
-aux$res <- res$res
+## Using exact M just in fitBetaBinomialLogistic. 
 
 aux <- dd %>% mutate(M=200) %>% group_by(identifier) %>% nest()
 
-
 res <- aux %>% mutate(res=map(data,fitBetaBinomialLogistic,~Treatment, eps=0.001))
-##res <- aux %>% mutate(res=map2(data,res, ~fitBetaBinomialLogistic(.x,model=model, b=.y$coeff,eps=neweps,control=list(factr=1E10)))) 
 
 res <- res %>% mutate(data=map(res, "dd"),res=map(res,"res"))
 
-##res3 <- res %>% select(identifier, data) %>% 
-##  unnest(cols=c(data))
-
-##oldcoeff <- res2$coeff
 res2 <- res %>% select(identifier,res) %>% unnest(cols=c(res))
 
 aseInt3 <- res2 %>% dplyr::filter(term=="(Intercept)") ##%>% left_join(dd)
 aseTr3 <- res2 %>% dplyr::filter(term=="Treatmenttreatment") ##%>% left_join(dd)
 
-plot(-log10(aseInt3$pval),-log10(aseInt2$pval))
-abline(0,1)
+
 
 qq(aseInt3$pval)
 
-qq(aseTr2$pval)
+qq(aseTr3$pval)
 
-
-plot(-log10(aseInt$pval),-log10(aseInt2$pval))
+plot(-log10(aseInt$pval),-log10(aseInt3$pval))
 abline(0,1)
+
+
+plot(-log10(resCR.Int$p.value),-log10(aseInt3$pval))
+abline(0,1)
+
+plot(-log10(aseTr$pval),-log10(aseTr3$pval))
+abline(0,1)
+
+
+plot(-log10(resCR.Tr$p.value),-log10(aseTr3$pval))
+abline(0,1)
+
+disp <- fit$dispersion
+
+plot(disp$baseMean,disp$M)
+
+hist(disp$M[disp$baseMean>400],breaks=100)
+
 
   mean(dd$R == 0 | dd$A == 0)
 # [1] 0
