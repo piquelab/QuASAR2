@@ -5,8 +5,6 @@
 NULL
 
 #' Log-likelihood for Beta-Binomial with Phi reparameterization
-...
-
 #' @param b Coefficients
 #' @param phi Dispersion parameter log(1/M)
 #' @param X Design matrix
