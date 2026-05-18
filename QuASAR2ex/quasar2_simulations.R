@@ -118,7 +118,13 @@ Nvec=round(runif(20000,60,1000))
 
 dd <- sim_quasar2_df(n_snps = 20000, n_ctrl = 5, n_trt = 5, M = 200, N = Nvec, seed=1,frac_ASE_only=0.05,frac_cASE_only=0.05)
 
+
+dd2 <- dd %>% group_by(identifier) %>% summarize(is_ASE=first(is_ASE),is_cASE=first(is_cASE),N=mean(N))
+
+table(dd2$is_ASE)
+
 ## ---------- 2. Fit ----------
+## From Claude. 
 fit <- fitQuasar2CR(dd, design = ~ Treatment,
                     max_iter = 6, verbose = TRUE)
 
@@ -130,13 +136,64 @@ resCR.Tr <- testCoef(fit, coef = "Treatmenttreatment",df_method = "moderated")
 resCR.Int <- testCoef(fit, coef = "(Intercept)",df_method = "moderated")
 
 
+resCR.Tr <- left_join(dd2,resCR.Tr)
+
 sum(resCR.Int$padj<0.1)
 
 sum(resCR.Tr$padj<0.1)
 
 qq(resCR.Tr$p.value)
 
+
+qq(resCR.Tr$p.value[!resCR.Tr$is_cASE])
+
+sum(resCR.Tr$padj[!resCR.Tr$is_cASE]<0.1)
+
+sum(resCR.Tr$padj[resCR.Tr$is_cASE]<0.1)
+
+
+####
+## The one from gemini
+resglm <- fitQuasar_GLM(dd,~Treatment)
+
+str(resglm)
+
+head(resglm$results)
+
+aseIntGlm <- resglm$results %>% dplyr::filter(term=="(Intercept)") ##%>% left_join(dd)
+
+aseTrGlm <- resglm$results %>% dplyr::filter(term=="Treatmenttreatment") ##%>% left_join(dd)
+
+aseTrGlm <- left_join(dd2,aseTrGlm)
+
+aseIntGlm$padj <- p.adjust(aseIntGlm$p.value)
+
+aseTrGlm$padj <- p.adjust(aseTrGlm$p.value)
+
+
+sum(aseTrGlm$padj<0.1)
+
+sum(aseIntGlm$padj<0.1)
+
+qq(aseIntGlm$p.value)
+
+qq(aseTrGlm$p.value)
+
+qq(aseTrGlm$p.value[!aseTrGlm$is_cASE])
+
+
+sum(aseTrGlm$padj[!aseTrGlm$is_cASE]<0.1)
+
+sum(resCR.Tr$padj[aseTrGlm$is_cASE]<0.1)
+
+
+hist(aseTrGlm$M,breaks=200)
+
+plot(log10(aseTrGlm$N),log10(aseTrGlm$M))
+
 ######
+## My original implementation that does not have cox-reid correction but hessian is fixed. 
+
 resObj <- fitQuasar2(dd,~Treatment)
 
 
@@ -162,8 +219,11 @@ qq2 <- qq(aseTr$pval)
 
 ## Using exact M just in fitBetaBinomialLogistic. 
 
+
 aux <- dd %>% mutate(M=200) %>% group_by(identifier) %>% nest()
 
+
+## Fits the betabinomialLogistic, assumming you dont have to estimate M, that M is given. 
 res <- aux %>% mutate(res=map(data,fitBetaBinomialLogistic,~Treatment, eps=0.001))
 
 res <- res %>% mutate(data=map(res, "dd"),res=map(res,"res"))
@@ -186,7 +246,23 @@ abline(0,1)
 plot(-log10(resCR.Int$p.value),-log10(aseInt3$pval))
 abline(0,1)
 
+
+plot(-log10(aseIntGlm$p.value),-log10(aseInt3$pval))
+abline(0,1)
+
+
+plot(-log10(aseTrGlm$p.value),-log10(aseTr3$pval))
+abline(0,1)
+
+
 plot(-log10(aseTr$pval),-log10(aseTr3$pval))
+abline(0,1)
+
+
+plot(-log10(aseTr$pval),-log10(aseTrGlm$p.value))
+abline(0,1)
+
+plot(-log10(aseInt$pval),-log10(aseIntGlm$p.value))
 abline(0,1)
 
 
@@ -198,6 +274,8 @@ disp <- fit$dispersion
 plot(disp$baseMean,disp$M)
 
 hist(disp$M[disp$baseMean>400],breaks=100)
+
+
 
 
   mean(dd$R == 0 | dd$A == 0)

@@ -133,7 +133,8 @@ estimateDispersionQuasar <- function(dd, model, eps = 0.001, prior.df = NULL) {
   names(avg_log_cov) <- abundance$identifier
   
   cat("Estimating common dispersion...\n")
-  sample_ids <- if(n_snps > 500) sample(ids, 500) else ids
+  ##sample_ids <- if(n_snps > 500) sample(ids, 500) else ids
+  sample_ids <- ids
   common_ll <- function(phi) {
     sum(sapply(sample_ids, function(id) {
       adjustedLogLikPhi(phi, dd[dd$identifier == id, ], model, eps)
