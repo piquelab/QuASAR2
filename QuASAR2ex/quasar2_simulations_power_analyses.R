@@ -314,7 +314,7 @@ run_one_sim <- function(sim_params, fdr_alpha = 0.1, verbose = FALSE) {
       method    = "QuASAR2",
       test      = "cASE (trt coef)",
       truth_col = "is_cASE",
-      pvalue    = trt_q2$p.value,
+      pvalue    = trt_q2$pval,
       padj      = trt_q2$padj,
       truth_pos = trt_q2$is_cASE,
       cov_bin   = trt_q2$cov_bin
@@ -323,7 +323,7 @@ run_one_sim <- function(sim_params, fdr_alpha = 0.1, verbose = FALSE) {
       method    = "QuASAR2",
       test      = "ASE (intercept)",
       truth_col = "is_ASE",
-      pvalue    = int_q2$p.value,
+      pvalue    = int_q2$pval,
       padj      = int_q2$padj,
       truth_pos = int_q2$is_ASE,
       cov_bin   = int_q2$cov_bin
@@ -366,25 +366,32 @@ run_one_sim <- function(sim_params, fdr_alpha = 0.1, verbose = FALSE) {
 # 5.  POWER ANALYSIS GRID
 # ============================================================
 # Sweeps over:
-#   - N_range  : coverage scenarios (low / medium / high)
+#   - N_range  : coverage scenarios (low / high — keep small for speed)
 #   - M        : overdispersion scenarios (tight / moderate / overdispersed)
 #   - delta    : effect sizes (subtle / moderate / large)
-# For each cell: simulate once, compute power & FPR per method × test × coverage bin.
+#
+# Runtime guidance:
+#   n_snps = 2000, 2 N scenarios, 3 M, 3 delta → 18 cells → ~10-20 min single core
+#   n_snps = 2000, parallel via future.apply    → ~3-5  min
+#   Add more N scenarios or n_snps once you confirm the pipeline works.
+#
+# To parallelise: library(future.apply); plan(multisession) before calling.
 
 build_power_grid <- function(
-  N_scenarios    = list(low  = c(20,  80),
+  N_scenarios     = list(low  = c(20,  80),
                         mid  = c(60,  300),
                         high = c(200, 1000)),
-  M_scenarios    = c(tight = 500, moderate = 100, overdispersed = 20),
-  delta_scenarios= c(subtle = 0.05, moderate = 0.10, large = 0.20),
-  n_snps         = 20000,   # fewer SNPs to keep run time manageable
-  n_ctrl         = 5,
-  n_trt          = 5,
-  frac_ASE_only  = 0.05,
-  frac_cASE_only = 0.05,
-  fdr_alpha      = 0.1,
-  seed_base      = 42,
-  verbose        = FALSE
+  M_scenarios     = c(tight = 500, moderate = 100, overdispersed = 20),
+  delta_scenarios = c(subtle = 0.05, moderate = 0.10, large = 0.20),
+  n_snps          = 2000,   # 2000 is enough for stable power estimates
+  n_ctrl          = 5,
+  n_trt           = 5,
+  frac_ASE_only   = 0.05,
+  frac_cASE_only  = 0.05,
+  fdr_alpha       = 0.1,
+  seed_base       = 42,
+  verbose         = FALSE,
+  parallel        = FALSE   # set TRUE if future.apply is loaded + plan() set
 ) {
   grid <- expand.grid(
     N_name     = names(N_scenarios),
@@ -393,36 +400,35 @@ build_power_grid <- function(
     stringsAsFactors = FALSE
   )
 
-  pb <- txtProgressBar(min = 0, max = nrow(grid), style = 3)
+  message(sprintf("Grid: %d cells × %d SNPs each. Running %s.",
+                  nrow(grid), n_snps,
+                  if (parallel) "in parallel" else "sequentially"))
 
-  all_rows <- vector("list", nrow(grid))
-
-  for (i in seq_len(nrow(grid))) {
-    setTxtProgressBar(pb, i)
+  run_cell <- function(i) {
     row  <- grid[i, ]
     Nrng <- N_scenarios[[row$N_name]]
     Mval <- M_scenarios[row$M_name]
     dval <- delta_scenarios[row$delta_name]
 
     sim_p <- list(
-      n_snps         = n_snps,
-      n_ctrl         = n_ctrl,
-      n_trt          = n_trt,
-      N_range        = Nrng,
-      M              = Mval,
-      frac_ASE_only  = frac_ASE_only,
-      frac_cASE_only = frac_cASE_only,
+      n_snps           = n_snps,
+      n_ctrl           = n_ctrl,
+      n_trt            = n_trt,
+      N_range          = Nrng,
+      M                = Mval,
+      frac_ASE_only    = frac_ASE_only,
+      frac_cASE_only   = frac_cASE_only,
       delta_ASE_range  = c(dval, dval),
       delta_cASE_range = c(dval, dval),
-      seed           = seed_base + i
+      seed             = seed_base + i
     )
 
     res_long <- run_one_sim(sim_p, fdr_alpha = fdr_alpha, verbose = verbose)
-    if (is.null(res_long)) next
+    if (is.null(res_long)) return(NULL)
 
-    # Compute power & FPR per method × test × coverage bin
-    summary_rows <- res_long %>%
-      group_by(method, test, cov_bin) %>%
+    # summarise power & FPR per method × test only (no cov_bin — N_scenario carries coverage)
+    res_long %>%
+      group_by(method, test) %>%
       summarise(
         power    = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$power,
         fpr      = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fpr,
@@ -430,18 +436,29 @@ build_power_grid <- function(
         .groups  = "drop"
       ) %>%
       mutate(
-        N_scenario    = row$N_name,
-        M_scenario    = row$M_name,
-        delta_scenario= row$delta_name,
-        N_lo          = Nrng[1],
-        N_hi          = Nrng[2],
-        M_val         = Mval,
-        delta_val     = dval
+        N_scenario     = row$N_name,
+        M_scenario     = row$M_name,
+        delta_scenario = row$delta_name,
+        N_lo           = Nrng[1],
+        N_hi           = Nrng[2],
+        M_val          = Mval,
+        delta_val      = dval
       )
-
-    all_rows[[i]] <- summary_rows
   }
-  close(pb)
+
+  if (parallel && requireNamespace("future.apply", quietly = TRUE)) {
+    all_rows <- future.apply::future_lapply(
+      seq_len(nrow(grid)), run_cell, future.seed = TRUE
+    )
+  } else {
+    pb       <- txtProgressBar(min = 0, max = nrow(grid), style = 3)
+    all_rows <- vector("list", nrow(grid))
+    for (i in seq_len(nrow(grid))) {
+      setTxtProgressBar(pb, i)
+      all_rows[[i]] <- run_cell(i)
+    }
+    close(pb)
+  }
 
   bind_rows(all_rows)
 }
@@ -450,10 +467,21 @@ build_power_grid <- function(
 # ============================================================
 # 6.  PLOTTING: POWER & FPR CURVES  →  PDF
 # ============================================================
+#
+# Two plot types per test × N scenario:
+#
+#   Plot A  x = delta (effect size),     facets = M scenario
+#           Story: "how strong does the signal need to be?"
+#
+#   Plot B  x = M_val (overdispersion),  facets = delta scenario
+#           Story: "how noisy can the data be before methods break?"
+#           x-axis reversed so left = easy (tight), right = hard (noisy)
+#
+# Each plot type stacks power (top) + FPR (bottom) via patchwork.
 
 plot_power_fpr <- function(
   power_df,
-  out_pdf  = "QuASAR2_power_analysis.pdf",
+  out_pdf   = "QuASAR2_power_analysis.pdf",
   fdr_alpha = 0.1
 ) {
   method_colors <- c(
@@ -463,54 +491,115 @@ plot_power_fpr <- function(
     "LM"         = "#984EA3"
   )
 
-  # helper: facet over delta (x-axis) × M (facet col) per N scenario
-  make_curve_plot <- function(df, y_var, y_lab, title_suffix, h_line = NULL) {
-    df$y_val <- df[[y_var]]
-    ggplot(df, aes(x = delta_val, y = y_val,
-                   color = method, group = method)) +
+  # order M_scenario so facets read tight → moderate → overdispersed
+  power_df$M_scenario <- factor(
+    power_df$M_scenario,
+    levels = c("tight", "moderate", "overdispersed")
+  )
+  # order delta_scenario subtle → moderate → large
+  power_df$delta_scenario <- factor(
+    power_df$delta_scenario,
+    levels = c("subtle", "moderate", "large")
+  )
+
+  # ---- shared theme ----
+  base_theme <- theme_bw(base_size = 10) +
+    theme(
+      strip.background = element_rect(fill = "grey92"),
+      legend.position  = "bottom",
+      panel.grid.minor = element_blank()
+    )
+
+  # ---- generic panel builder ----
+  make_panel <- function(df, x_var, x_lab, y_var, y_lab,
+                         facet_var, facet_lab,
+                         h_line = NULL, reverse_x = FALSE) {
+    df$x_val     <- df[[x_var]]
+    df$y_val     <- df[[y_var]]
+    df$facet_val <- df[[facet_var]]
+
+    p <- ggplot(df, aes(x = x_val, y = y_val,
+                        color = method, group = method)) +
       geom_line(linewidth = 0.9) +
       geom_point(size = 2) +
-      facet_grid(cov_bin ~ M_scenario,
-                 labeller = labeller(
-                   cov_bin    = function(x) paste("coverage:", x),
-                   M_scenario = function(x) paste("M:", x)
-                 )) +
+      facet_wrap(~ facet_val, nrow = 1,
+                 labeller = labeller(facet_val = function(x)
+                   paste(facet_lab, x))) +
       { if (!is.null(h_line))
           geom_hline(yintercept = h_line, linetype = "dashed", color = "grey50") } +
+      { if (reverse_x) scale_x_reverse() } +
       scale_color_manual(values = method_colors) +
-      scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
-      scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                         limits = c(0, 1)) +
-      labs(
-        title  = paste(y_lab, "—", title_suffix),
-        x      = "Effect size (delta)",
-        y      = y_lab,
-        color  = "Method",
-        caption= paste0("FDR threshold = ", fdr_alpha)
+      scale_y_continuous(
+        labels = scales::percent_format(accuracy = 1),
+        limits = c(0, 1)
       ) +
-      theme_bw(base_size = 10) +
-      theme(
-        strip.background = element_rect(fill = "grey92"),
-        legend.position  = "bottom"
-      )
+      labs(x = x_lab, y = y_lab, color = "Method",
+           caption = paste0("FDR threshold = ", fdr_alpha)) +
+      base_theme
+    p
   }
 
-  pdf(out_pdf, width = 11, height = 8.5)
+  pdf(out_pdf, width = 11, height = 9)
 
   for (test_label in unique(power_df$test)) {
     for (N_lab in unique(power_df$N_scenario)) {
+
       sub <- power_df %>%
         filter(test == test_label, N_scenario == N_lab)
-
       if (nrow(sub) == 0) next
 
-      title_str <- sprintf("%s | Coverage: %s", test_label, N_lab)
+      page_title <- sprintf("%s  |  Coverage: %s", test_label, N_lab)
 
-      p_power <- make_curve_plot(sub, "power", "Power (TPR)", title_str)
-      p_fpr   <- make_curve_plot(sub, "fpr",   "False Positive Rate", title_str,
-                                  h_line = fdr_alpha)
+      # ---- Plot A: x = effect size, facets = overdispersion ----
+      pA_power <- make_panel(
+        sub,
+        x_var     = "delta_val",
+        x_lab     = "Effect size (delta)",
+        y_var     = "power",
+        y_lab     = "Power (TPR)",
+        facet_var = "M_scenario",
+        facet_lab = "Overdispersion:"
+      ) + ggtitle(paste("A — Power by effect size |", page_title)) +
+        scale_x_continuous(labels = scales::percent_format(accuracy = 1))
 
-      print(p_power / p_fpr)   # patchwork: stack vertically
+      pA_fpr <- make_panel(
+        sub,
+        x_var     = "delta_val",
+        x_lab     = "Effect size (delta)",
+        y_var     = "fpr",
+        y_lab     = "False Positive Rate",
+        facet_var = "M_scenario",
+        facet_lab = "Overdispersion:",
+        h_line    = fdr_alpha
+      ) + scale_x_continuous(labels = scales::percent_format(accuracy = 1))
+
+      print(pA_power / pA_fpr)
+
+      # ---- Plot B: x = M (overdispersion), facets = effect size ----
+      pB_power <- make_panel(
+        sub,
+        x_var     = "M_val",
+        x_lab     = "M (overdispersion)  ←  noisier",
+        y_var     = "power",
+        y_lab     = "Power (TPR)",
+        facet_var = "delta_scenario",
+        facet_lab = "Effect size:",
+        reverse_x = TRUE   # high M (tight) on left, low M (noisy) on right
+      ) + ggtitle(paste("B — Power by overdispersion |", page_title))
+
+      pB_fpr <- make_panel(
+        sub,
+        x_var     = "M_val",
+        x_lab     = "M (overdispersion)  ←  noisier",
+        y_var     = "fpr",
+        y_lab     = "False Positive Rate",
+        facet_var = "delta_scenario",
+        facet_lab = "Effect size:",
+        h_line    = fdr_alpha,
+        reverse_x = TRUE
+      )
+
+      print(pB_power / pB_fpr)
     }
   }
 
@@ -522,7 +611,7 @@ plot_power_fpr <- function(
 # ============================================================
 # 7.  QQ-PLOT COMPARISON  →  PDF
 # ============================================================
-# Overlay QQ plots for all four methods on the same axes (null SNPs only).
+# Overlay QQ plots for all four methods on the same axes 
 
 plot_qq_comparison <- function(
   sim_params,
@@ -559,6 +648,57 @@ plot_qq_comparison <- function(
         )) +
         labs(
           title = "QQ plot",
+          x = "Expected -log10(p)",
+          y = "Observed -log10(p)",
+          color = "Method"
+        ) +
+        theme_bw(base_size = 11)
+    
+      pdf(out_pdf, width = 10, height = 6)
+      print(p_qq)
+      dev.off()
+  message("Saved: ", out_pdf)
+}
+
+
+# Overlay QQ plots for all four methods on the same axes - null SNPs only
+
+plot_qq_null_comparison <- function(
+  sim_params,
+  out_pdf = "QuASAR2_qq_null_comparison.pdf",
+  verbose = FALSE
+) {
+  res_long <- run_one_sim(sim_params, verbose = verbose)
+    qq_data <- res_long %>%
+        filter(!truth_pos) %>%
+        group_by(method, test) %>%
+        arrange(pvalue) %>%
+        mutate(
+          expected = -log10(ppoints(n())),
+          observed = -log10(pmax(pvalue, 1e-300))
+        ) %>%
+        ungroup()
+    
+      p_qq <- ggplot(
+        qq_data,
+        aes(x = expected, y = observed, color = method)
+      ) +
+        geom_abline(
+          intercept = 0,
+          slope = 1,
+          linetype = "dashed",
+          color = "grey50"
+        ) +
+        geom_line(alpha = 0.8) +
+        facet_wrap(~ test, ncol = 2) +
+        scale_color_manual(values = c(
+          "QuASAR2CR"  = "#E41A1C",
+          "QuASAR_GLM" = "#377EB8",
+          "QuASAR2"    = "#4DAF4A",
+          "LM"         = "#984EA3"
+        )) +
+        labs(
+          title = "QQ plot - null SNPs",
           x = "Expected -log10(p)",
           y = "Observed -log10(p)",
           color = "Method"
@@ -622,24 +762,40 @@ if (TRUE) {   # set to TRUE to execute
     ),
     out_pdf = "QuASAR2_qq_comparison.pdf"
   )
+  
+  plot_qq_null_comparison(
+    sim_params = list(
+      n_snps          = 10000,
+      n_ctrl          = 5,
+      n_trt           = 5,
+      N_range         = c(60, 300),
+      M               = 100,
+      frac_ASE_only   = 0.05,
+      frac_cASE_only  = 0.05,
+      delta_ASE_range  = c(0.10, 0.10),
+      delta_cASE_range = c(0.10, 0.10),
+      seed            = 99
+    ),
+    out_pdf = "QuASAR2_qq_null_comparison.pdf"
+  )
 
   ## --- 8c. Full power analysis grid ---
-  power_df <- build_power_grid(
+   power_df <- build_power_grid(
     N_scenarios     = list(low  = c(20,  80),
-                           mid  = c(60,  300),
-                           high = c(200, 1000)),
+                        mid  = c(60,  300),
+                        high = c(200, 1000)),
     M_scenarios     = c(tight = 500, moderate = 100, overdispersed = 20),
     delta_scenarios = c(subtle = 0.05, moderate = 0.10, large = 0.20),
-    n_snps          = 10000,
+    n_snps          = 2000,
     n_ctrl          = 5,
     n_trt           = 5,
     frac_ASE_only   = 0.05,
     frac_cASE_only  = 0.05,
     fdr_alpha       = 0.1,
-    seed_base       = 42
+    seed_base       = 42,
+    parallel        = FALSE   # flip to TRUE + run plan(multisession) first
   )
 
-  saveRDS(power_df, "QuASAR2_power_grid.rds")  # cache results
-
+  saveRDS(power_df, paste0("QuASAR2_power_grid_", Sys.Date(), ".rds"))
   plot_power_fpr(power_df, out_pdf = "QuASAR2_power_analysis.pdf")
 }
