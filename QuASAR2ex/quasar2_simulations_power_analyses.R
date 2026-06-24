@@ -1,4 +1,4 @@
-# QuASAR2_simulations_v2.R
+1# QuASAR2_simulations_v2.R
 # Purpose: Simulation and power/FPR analysis comparing fitQuasar2CR, fitQuasar2,
 #          fitQuasar_GLM, and a standard linear model (LM) for ASE/cASE detection.
 # Author:  Shreya Nirmalan (updated)
@@ -203,8 +203,16 @@ compute_power_fpr <- function(padj, truth_positive, alpha = 0.1) {
 
   power <- if ((tp + fn) > 0) tp / (tp + fn) else NA_real_
   fpr   <- if ((fp + tn) > 0) fp / (fp + tn) else NA_real_
+  empirical_fdr <- if ((tp + fp) > 0) fp / (tp + fp) else NA_real_
 
-  list(power = power, fpr = fpr, n_called = sum(called))
+  list(
+    power = power,
+    fpr = fpr,
+    empirical_fdr = empirical_fdr,
+    n_called = sum(called),
+    tp = tp,
+    fp = fp
+  )
 }
 
 
@@ -427,22 +435,16 @@ build_power_grid <- function(
     if (is.null(res_long)) return(NULL)
 
     # summarise power & FPR per method × test only (no cov_bin — N_scenario carries coverage)
-    res_long %>%
+  res_long %>%
       group_by(method, test) %>%
       summarise(
-        power    = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$power,
-        fpr      = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fpr,
+        power = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$power,
+        fpr = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fpr,
+        empirical_fdr = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$empirical_fdr,
         n_called = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$n_called,
-        .groups  = "drop"
-      ) %>%
-      mutate(
-        N_scenario     = row$N_name,
-        M_scenario     = row$M_name,
-        delta_scenario = row$delta_name,
-        N_lo           = Nrng[1],
-        N_hi           = Nrng[2],
-        M_val          = Mval,
-        delta_val      = dval
+        tp = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$tp,
+        fp = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fp,
+        .groups = "drop"
       )
   }
 
@@ -539,7 +541,7 @@ plot_power_fpr <- function(
     p
   }
 
-  pdf(out_pdf, width = 11, height = 9)
+  pdf(out_pdf, width = 11, height = 12)
 
   for (test_label in unique(power_df$test)) {
     for (N_lab in unique(power_df$N_scenario)) {
@@ -572,8 +574,26 @@ plot_power_fpr <- function(
         facet_lab = "Overdispersion:",
         h_line    = fdr_alpha
       ) + scale_x_continuous(labels = scales::percent_format(accuracy = 1))
+      
+      pA_fdr <- make_panel(
+        sub,
+        x_var     = "delta_val",
+        x_lab     = "Effect size (delta)",
+        y_var     = "empirical_fdr",
+        y_lab     = "Empirical False Discovery Rate",
+        facet_var = "M_scenario",
+        facet_lab = "Overdispersion:",
+        h_line    = fdr_alpha
+      ) + scale_x_continuous(labels = scales::percent_format(accuracy = 1))
 
-      print(pA_power / pA_fpr)
+      print(
+          (pA_power / pA_fpr / pA_fdr) +
+            patchwork::plot_layout(guides = "collect") &
+            theme(
+              legend.position = "bottom",
+              legend.title = element_blank()
+            )
+        )
 
       # ---- Plot B: x = M (overdispersion), facets = effect size ----
       pB_power <- make_panel(
@@ -599,7 +619,25 @@ plot_power_fpr <- function(
         reverse_x = TRUE
       )
 
-      print(pB_power / pB_fpr)
+    pB_fdr <- make_panel(
+        sub,
+        x_var     = "M_val",
+        x_lab     = "M (overdispersion)  ←  noisier",
+        y_var     = "empirical_fdr",
+        y_lab     = "Empirical False Discovery Rate",
+        facet_var = "delta_scenario",
+        facet_lab = "Effect size:",
+        h_line    = fdr_alpha,
+        reverse_x = TRUE
+      )
+      print(
+      (pB_power / pB_fpr / pB_fdr) +
+        patchwork::plot_layout(guides = "collect") &
+        theme(
+          legend.position = "bottom",
+          legend.title = element_blank()
+        )
+    )
     }
   }
 
@@ -716,7 +754,7 @@ plot_qq_null_comparison <- function(
 # 8.  EXAMPLE / QUICK-RUN  (edit as needed)
 # ============================================================
 
-if (TRUE) {   # set to TRUE to execute
+if (FALSE) {   # set to TRUE to execute
 
   ## --- 8a. Single simulation (sanity check) ---
   dd <- sim_quasar2_df(
@@ -798,4 +836,28 @@ if (TRUE) {   # set to TRUE to execute
 
   saveRDS(power_df, paste0("QuASAR2_power_grid_", Sys.Date(), ".rds"))
   plot_power_fpr(power_df, out_pdf = "QuASAR2_power_analysis.pdf")
+}
+
+
+# Updated power analyses 6-24-2026
+if(TRUE) {
+    power_df <- build_power_grid(
+        N_scenarios     = list(low  = c(20,  80),
+                            mid  = c(60,  300),
+                            high = c(200, 1000)),
+        M_scenarios     = c(tight = 500, moderate = 100, overdispersed = 20),
+        delta_scenarios = c(subtle = 0.05, moderate = 0.10, large = 0.20),
+        n_snps          = 5000,
+        n_ctrl          = 5,
+        n_trt           = 5,
+        frac_ASE_only   = 0.05,
+        frac_cASE_only  = 0.05,
+        fdr_alpha       = 0.1,
+        seed_base       = 42,
+        parallel        = FALSE   # flip to TRUE + run plan(multisession) first
+      )
+    
+      saveRDS(power_df, paste0("QuASAR2_power_grid_", Sys.Date(), ".rds"))
+      plot_power_fpr(power_df, out_pdf = paste0("QuASAR2_power_analysis_", Sys.Date(), ".pdf"))
+    
 }
