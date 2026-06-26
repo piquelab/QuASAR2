@@ -2,7 +2,7 @@
 # Purpose: Simulation analysis comparing estimated overdispersion M across
 #          fitQuasar2CR, fitQuasar2, and fitQuasar_GLM.
 # Author:  Shreya Nirmalan
-# Date:    6/17/2026
+# Date:    6/24/2026
 
 # Load QuASAR2 locally
 devtools::load_all("/rs/rs_grp_scaipgenetic/QuASAR2")
@@ -114,6 +114,12 @@ sim_quasar2_df <- function(
 run_one_M_sim <- function(sim_params, verbose = FALSE) {
 
   dd <- do.call(sim_quasar2_df, sim_params)
+  truth_cov <- dd %>%
+  group_by(identifier) %>%
+  summarise(
+    mean_RA = mean(R + A),
+    .groups = "drop"
+  )
 
   M_true <- sim_params$M
 
@@ -154,21 +160,52 @@ run_one_M_sim <- function(sim_params, verbose = FALSE) {
 
 
   # ---- fitQuasar2 original ----
-  tryCatch({
-    fit_q2 <- fitQuasar2(dd, ~ Treatment)
+tryCatch({
+  nbreaks_q2 <- 20
 
-    results$Q2 <- tibble(
+  fit_q2 <- fitQuasar2(
+    dd,
+    ~ Treatment,
+    nbreaks = nbreaks_q2
+  )
+
+  q2_bins <- dd %>%
+    group_by(identifier) %>%
+    summarise(
+      mean_RA = mean(R + A),
+      .groups = "drop"
+    )
+
+  cov_breaks <- unique(c(
+    0,
+    quantile(
+      q2_bins$mean_RA,
+      probs = (1:nbreaks_q2) / nbreaks_q2,
+      na.rm = TRUE
+    )
+  ))
+
+  q2_bins <- q2_bins %>%
+    mutate(
+      bin = cut(mean_RA, breaks = cov_breaks),
+      M_est = as.numeric(fit_q2$Mvec[as.character(bin)])
+    ) %>%
+    transmute(
       method = "QuASAR2",
-      identifier = paste0("M_bin_", seq_along(fit_q2$Mvec)),
-      M_est = as.numeric(fit_q2$Mvec),
+      identifier,
+      M_est,
       estimate_level = "coverage_bin"
     )
-  }, error = function(e) message("fitQuasar2 error: ", conditionMessage(e)))
+
+  results$Q2 <- q2_bins
+
+}, error = function(e) message("fitQuasar2 error: ", conditionMessage(e)))
 
   if (length(results) == 0) return(NULL)
 
   bind_rows(results) %>%
-    mutate(M_true = M_true)
+  left_join(truth_cov, by = "identifier") %>%
+  mutate(M_true = M_true)
 }
 
 
@@ -302,7 +339,56 @@ plot_M_recovery <- function(
   p
 }
 
+plot_M_vs_coverage <- function(
+  M_df,
+  out_pdf = "QuASAR2_M_vs_coverage.pdf"
+) {
 
+  M_df <- M_df %>%
+    filter(
+      !is.na(M_est),
+      is.finite(M_est),
+      M_est > 0,
+      !is.na(mean_RA),
+      mean_RA > 0
+    ) %>%
+    mutate(
+      log10_mean_RA = log10(mean_RA),
+      method = factor(
+        method,
+        levels = c("QuASAR2", "QuASAR2CR", "QuASAR_GLM")
+      )
+    )
+
+  p <- ggplot(M_df, aes(x = log10_mean_RA, y = M_est)) +
+    geom_point(alpha = 0.25, size = 0.7) +
+    geom_hline(
+      aes(yintercept = M_true),
+      linetype = "dashed",
+      color = "grey40"
+    ) +
+    facet_wrap(~ method, nrow = 1) +
+    scale_y_log10() +
+    labs(
+      x = "log10(mean coverage per SNP)",
+      y = "Estimated M",
+      title = "Estimated M as a function of coverage",
+      subtitle = "Dashed line = true simulated M"
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      strip.background = element_rect(fill = "grey92"),
+      panel.grid.minor = element_blank()
+    )
+
+  pdf(out_pdf, width = 11, height = 4)
+  print(p)
+  dev.off()
+
+  message("Saved: ", out_pdf)
+
+  p
+}
 # ============================================================
 # 5. SUMMARY TABLE
 # ============================================================
@@ -361,3 +447,26 @@ if (TRUE) {
 
   print(M_summary)
 }
+
+
+# M versus coverage plot
+M_df <- build_M_recovery_grid(
+  N_scenarios = list(
+    wide = c(20, 1000)
+  ),
+  M_scenarios = c(
+    moderate = 100
+  ),
+  n_snps = 10000,
+  n_ctrl = 5,
+  n_trt = 5,
+  frac_ASE_only = 0.05,
+  frac_cASE_only = 0.05,
+  delta = 0.10,
+  seed_base = 42,
+  verbose = FALSE
+)
+plot_M_vs_coverage(
+  M_df,
+  out_pdf = paste0("QuASAR2_M_vs_coverage", Sys.Date(), ".pdf")
+)

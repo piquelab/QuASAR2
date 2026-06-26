@@ -435,17 +435,26 @@ build_power_grid <- function(
     if (is.null(res_long)) return(NULL)
 
     # summarise power & FPR per method × test only (no cov_bin — N_scenario carries coverage)
-  res_long %>%
-      group_by(method, test) %>%
-      summarise(
-        power = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$power,
-        fpr = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fpr,
-        empirical_fdr = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$empirical_fdr,
-        n_called = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$n_called,
-        tp = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$tp,
-        fp = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fp,
-        .groups = "drop"
-      )
+    res_long %>%
+          group_by(method, test) %>%
+          summarise(
+            power = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$power,
+            fpr = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fpr,
+            empirical_fdr = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$empirical_fdr,
+            n_called = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$n_called,
+            tp = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$tp,
+            fp = compute_power_fpr(padj, truth_pos, alpha = fdr_alpha)$fp,
+            .groups = "drop"
+          ) %>%
+          mutate(
+            N_scenario = row$N_name,
+            M_scenario = row$M_name,
+            delta_scenario = row$delta_name,
+            N_lo = Nrng[1],
+            N_hi = Nrng[2],
+            M_val = Mval,
+            delta_val = dval
+         )
   }
 
   if (parallel && requireNamespace("future.apply", quietly = TRUE)) {
