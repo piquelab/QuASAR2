@@ -124,6 +124,16 @@ GEN_JOB=$(sbatch \
   --mail-user="${MAIL_USER}" \
   --wrap="
 module unload gnu7; module load gnu9 R
+
+echo \"========================================\"
+echo \"Job ID:      \${SLURM_JOB_ID}\"
+echo \"Array Task:  \${SLURM_ARRAY_TASK_ID}\"
+echo \"Node:        \$(hostname)\"
+echo \"Node List:   \${SLURM_JOB_NODELIST}\"
+echo \"CPU Model:   \$(lscpu | grep 'Model name' | sed 's/Model name:[[:space:]]*//')\"
+echo \"Start Time:  \$(date)\"
+echo \"========================================\"
+
 echo \"Generating seed \${SLURM_ARRAY_TASK_ID} at: \$(date)\"
 ${RSCRIPT} ${SCRIPT_DIR}/simulate_data_quasar2.R \
   \${SLURM_ARRAY_TASK_ID} \
@@ -163,6 +173,17 @@ submit_method_array() {
     --mail-user="${MAIL_USER}" \
     --wrap="
 module unload gnu7; module load gnu9 R
+
+echo \"========================================\"
+echo \"Job ID:      \${SLURM_JOB_ID}\"
+echo \"Array Task:  \${SLURM_ARRAY_TASK_ID}\"
+echo \"Method:      ${method_tag}\"
+echo \"Node:        \$(hostname)\"
+echo \"Node List:   \${SLURM_JOB_NODELIST}\"
+echo \"CPU Model:   \$(lscpu | grep 'Model name' | sed 's/Model name:[[:space:]]*//')\"
+echo \"Start Time:  \$(date)\"
+echo \"========================================\"
+
 RDS_FILE=${RESULTS_DIR}/data/sim_data_seed\$(printf '%02d' \${SLURM_ARRAY_TASK_ID})_N${N_LO}-${N_HI}_M${M}_d${DELTA}.rds
 if [[ ! -f \"\${RDS_FILE}\" ]]; then
   echo \"ERROR: expected file not found: \${RDS_FILE}\"
@@ -205,6 +226,15 @@ AGG_JOB=$(sbatch \
   --mail-user="${MAIL_USER}" \
   --wrap="
 module unload gnu7; module load gnu9 R
+
+echo \"========================================\"
+echo \"Job ID:      \${SLURM_JOB_ID}\"
+echo \"Node:        \$(hostname)\"
+echo \"Node List:   \${SLURM_JOB_NODELIST}\"
+echo \"CPU Model:   \$(lscpu | grep 'Model name' | sed 's/Model name:[[:space:]]*//')\"
+echo \"Start Time:  \$(date)\"
+echo \"========================================\"
+
 echo \"Aggregating results at: \$(date)\"
 ${RSCRIPT} ${SCRIPT_DIR}/simulation_result_analyses.R \
   ${RESULTS_DIR} \
