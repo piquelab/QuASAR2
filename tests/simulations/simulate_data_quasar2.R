@@ -70,6 +70,9 @@ sim_quasar2_df <- function(
   dir_snp        <- sample(c(-1L, 1L), n_snps, replace = TRUE)
   delta_ASE_snp  <- runif(n_snps, min = delta_ASE_range[1],  max = delta_ASE_range[2])
   delta_cASE_snp <- runif(n_snps, min = delta_cASE_range[1], max = delta_cASE_range[2])
+  
+  # Draw one fixed total read depth per SNP
+  N_snp <- round(runif(n_snps,min = N_range[1],max = N_range[2]))
 
   truth <- data.frame(
     identifier  = snps,
@@ -78,7 +81,8 @@ sim_quasar2_df <- function(
     is_cASE     = class %in% c("cASE_only", "both"),
     direction   = dir_snp,
     delta_ASE   = delta_ASE_snp,
-    delta_cASE  = delta_cASE_snp
+    delta_cASE  = delta_cASE_snp,
+    N_snp       = N_snp
   )
 
   dd <- merge(truth, samples, all = TRUE)
@@ -102,8 +106,9 @@ sim_quasar2_df <- function(
 
   p <- pmin(pmax(p, 1e-6), 1 - 1e-6)
   dd$prop_true <- p
-
-  dd$N     <- round(runif(nrow(dd), min = N_range[1], max = N_range[2]))
+  
+  # Same total coverage for every replicate of a given SNP
+  dd$N <- dd$N_snp
   theta    <- rbeta(nrow(dd), p * M, (1 - p) * M)
   dd$R     <- rbinom(nrow(dd), size = dd$N, prob = theta)
   dd$A     <- dd$N - dd$R
