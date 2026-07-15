@@ -1,0 +1,8 @@
+for M in 20 100 150 200 300 500; do
+    sbatch run_simulations.sh --M $M --delta 0.1 --N_lo 20 --N_hi 1000
+ done
+ 
+
+for M in 50 75; do
+    sbatch run_simulations.sh --M $M --delta 0.1 --N_lo 20 --N_hi 1000
+ done
